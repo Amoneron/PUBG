@@ -1,0 +1,112 @@
+{
+  "lastUpdated": "2026-02-22T21:00:40.381Z",
+  "totalTicks": 3600,
+  "durationMinutes": 1,
+  "standings": [
+    {
+      "name": "RatHorn",
+      "author": "BlackPeter",
+      "iq": 12,
+      "kills": 2,
+      "deaths": 0
+    },
+    {
+      "name": "ProSUCC",
+      "author": "Survs",
+      "iq": 10,
+      "kills": 0,
+      "deaths": 0
+    },
+    {
+      "name": "Pacifist",
+      "author": "Sonya",
+      "iq": 10,
+      "kills": 0,
+      "deaths": 0
+    },
+    {
+      "name": "Reptile",
+      "author": "vaskebjorn",
+      "iq": 10,
+      "kills": 0,
+      "deaths": 0
+    },
+    {
+      "name": "ДЕРЗКИЙ",
+      "author": "НЕИЗВЕСТЕН",
+      "iq": 10,
+      "kills": 0,
+      "deaths": 0
+    },
+    {
+      "name": "YSSYSIN",
+      "author": "X-Ray",
+      "iq": 10,
+      "kills": 0,
+      "deaths": 0
+    },
+    {
+      "name": "MoreGun",
+      "author": "Sad108",
+      "iq": 10,
+      "kills": 0,
+      "deaths": 0
+    },
+    {
+      "name": "Enigma",
+      "author": "BigData",
+      "iq": 10,
+      "kills": 0,
+      "deaths": 0
+    },
+    {
+      "name": "Edmund",
+      "author": "Amoneron",
+      "iq": 10,
+      "kills": 0,
+      "deaths": 0
+    },
+    {
+      "name": "Hodor",
+      "author": "Martin",
+      "iq": 10,
+      "kills": 0,
+      "deaths": 0
+    },
+    {
+      "name": "BULLetBULL",
+      "author": "Urist",
+      "iq": 10,
+      "kills": 0,
+      "deaths": 0
+    },
+    {
+      "name": "UtilizatoR",
+      "author": "macMini",
+      "iq": 9,
+      "kills": 0,
+      "deaths": 1
+    },
+    {
+      "name": "nil-oultet",
+      "author": "Andrey",
+      "iq": 9,
+      "kills": 0,
+      "deaths": 1
+    },
+    {
+      "name": "Mindblast",
+      "author": "Analytic",
+      "iq": 9,
+      "kills": 0,
+      "deaths": 1
+    },
+    {
+      "name": "Helltrain",
+      "author": "Devil",
+      "iq": 8,
+      "kills": 1,
+      "deaths": 1
+    }
+  ]
+}

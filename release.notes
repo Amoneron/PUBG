@@ -1,0 +1,145 @@
+
+---------------
+Release notes
+---------------
+
+
+
+--- v. 1.6, 07/02/2018 ---
+
+• IQ increased when enemy killed by dynamite.
+
+• Death star mode doesn't change activator's IQ on kills.
+
+• Stars frequency significantly decreased.
+
+
+
+--- v. 1.5, 04/02/2018 ---
+
+• Obstacles are destroyable now. By bullets only.
+{condition} value added to the object's structure. It measured in the same units as lives of creatures.
+E.g. {condition = 10} means this object can be destroyed with one bullet.
+
+• Dynamites added.
+Use {dynamitesProbability} const of the config file to tune amount of dynamites.
+
+• Stars added. Each star has it's own effect. Please see https://github.com/AppCraft-LLC/pubg/wiki/Objects#stars for more details.
+{type} and {shape} values added to the object's structure so you can determine kind of each object.
+{objectTypes} structure contains the following values: {obstacle: 0, dynamite: 1, star: 2}. 
+{shape} can be used to determine type of a star, use {starShapes} with the following values: 
+{levelup: 0, healing: 1, poisoned: 2, frozen: 3, death: 4}.
+Use {starsProbability} const of the config file to tune amount of stars.
+
+• Auras added. Auras show a state of a creature: is it spelling, poisoned or frozen.
+
+• Ground walls thickened to prevent objects fly through it.
+
+• {message} value added to the creature's struct. You can use it to read phrases of other creatures.
+
+• Kills and Deaths labels shortened to Ks and Ds respectively make leaderboard panel more compact.
+
+• Leaderboard displays up to 20 rows now. Others are under the cut.
+
+• Increasing and decreasing creatures count buttons added.
+Now you can change enemies amount whithout restarting the game.
+
+
+
+--- v. 1.4, 27/01/2018 ---
+
+• Frequency of the bullet generator changed. Bullets appear faster now.
+
+• 5 bullets adding at the start of the game.
+
+• Links to documentation and leaderboard added.
+
+• Added more brains as samples.
+
+• Tiny design fixes. Very tiny.
+
+
+
+--- v. 1.3, 21/01/2018 ---
+
+• Add brains shuffling. See {shuffle} option in the config.
+
+• Const {creatureMaxBullets = 3} changed to {creatureMaxBullets = [3, 4, 5]}. So creatures have different capacity of bullets depending on its level now.
+It's important to adopt existing brains considering this change.
+
+• Spells added. See documentation for details (https://github.com/AppCraft-LLC/pubg/wiki/Actions#rhino).
+
+• New {spell} event added.
+
+• Tiny design fixes. Bugfixes (including the one with passing events).
+
+
+
+--- v. 1.2, 14/01/2018 ---
+
+• Import mechanics changed. All scripts should follow {br_[name].js} filename notation. 
+Main brain variable's name must be the same as the filename. 
+E.g. if the filename of the script is {br_megabrain.js}, the main variable in it must be {br_megabrain}
+
+• Some parameters exported to the config file.
+
+• Tiny design fixes.
+
+• All object on the map are draggable now.
+
+• Added {kills}, {deaths} and {iq} fields to the creature struct.
+
+• IQ calculation algorithm changed with the following rules (vIQ is the victim's IQ, kIQ is the killer's IQ):
+    1. If kIQ > vIQ and the difference between them is more than 10 then both values won't be changed.
+    2. If kIQ < vIQ and the difference between them is more than 10 then kIQ will be increased by 1/3 of the difference whereas vIQ will be decreased by 1/5 of it.
+    3. If the difference between vIQ and kIQ is not more than 10 then kIQ will be increased by 1 and vIQ will be decreased by 1.
+    4. If the victim kill it by itself, then it's IQ will be decreased by 3.
+
+• {actions.turn} actions now accept {angle} parameter, this action turns a creature to the specified direction.
+Previous functionaly of this actions was moved to the new {actions.rotate} action.
+
+
+
+--- v. 1.1, 12/01/2018 ---
+
+• Messages added. To should add {message} parameter to the {params} field of the action structure. 
+    E.g. { do: actions.none, params: { message: "Yeahh" } }
+The message will be immediately displayed for 3 seconds. Each message can contain up to 2 lines of 20 chars in each.
+
+• Events added. {thinkAboutIt} function must contain {events} param:
+    thinkAboutIt: function(self, enemies, bullets, objects, events) {}
+Event has the following structure: 
+    Event = {
+        type: 0,
+        payload: null 
+    };
+Possible types are:
+    events = { wound: 0, murder: 1, death: 2, upgrade: 3, birth: 4 }
+Payload is an array witch contains one or more objects.
+Payload of {wound} and {murder} events contains 2 entities: an object and a subject. An object always is first.
+For example {wound} event can be: 
+    event = {
+        type: events.wound,
+        payload: [ obj1, obj2 ]
+    };
+Where {obj1} is the creature who was hurted and {obj2} is the creature who hurted {obj1} creature.
+Payload of other events contains only 1 entity, the creature who upgraded, died or was born.
+
+• Added {name} and {author} fields to the creature struct.
+
+• Added {bounds} field to the object struct. It contains AABB region of an object with the following format:
+    bounds = {
+        min: { x: 0,  y: 0 },
+        max: { x: 10, y: 10 }
+    };
+Where {min} is the left top corner of the region and {max} is the bottom right corner.
+
+• Added {rayBetween(obj1, obj2)} helper function. It can determine line visibility of two objects. 
+Returns {true} or {false}. {True} means objects are visible to each other, {false} otherwise.
+
+• New kinds of creatures added, now they are: 
+    kinds = { rhino: 0, bear: 1, moose: 2, bull: 3, runchip: 4, miner: 5, sprayer: 6, splitpus: 7 },
+
+• Energy refills 60% faster.
+
+• Bugfixes.
