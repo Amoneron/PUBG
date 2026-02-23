@@ -4,7 +4,7 @@
 
 Физику обеспечивает [Matter.js](https://brm.io/matter-js/) — 2D-движок без гравитации с реалистичными столкновениями.
 
-[![Arena](http://appcraft.pro/pubg/assets/pubg_scr_2.png)](http://appcraft.pro/projects/battleground/arena/)
+[![Arena](https://appcraft.pro/images/pubg/arena-screenshot.webp)](http://appcraft.pro/projects/battleground/arena/)
 
 ## Для кого этот проект
 
