@@ -601,21 +601,7 @@ pubg/
 
 ## Сервер и инфраструктура
 
-### Сервер
-- IP: 89.169.185.172
-- SSH Key: `/var/www/html/appcraft_site_development/keys/deploy_key`
-- User: master
-- OS: Ubuntu 24.04 LTS
-
-### Деплой
-- Проект собирается через `npm run build` → `dist/`
-- Nginx отдаёт `dist/` по нужному пути
-- leaderboard.json обновляется ночным cron-запуском Docker-контейнера
-
-### Ночной прогон
-- Cron: `0 2 * * * docker run --rm -v /path/to/data:/app/data pubg-headless`
-- Контейнер прогоняет 1 час игры → записывает leaderboard.json → завершается
-- leaderboard.json доступен Nginx как статический файл
+> Серверные credentials и конфигурация деплоя хранятся в `.deploy.md` (не коммитится в репозиторий).
 
 ---
 
