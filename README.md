@@ -1,34 +1,400 @@
-# Programmer Unknown's BattleGround
+# Programmers BattleGround
 
-PUBG (original [PUBG](https://www.playbattlegrounds.com), sorry for using your abbreviation, we just want to train our programming skills in this little game for coders and haven't plans to publish it on Steam in the future) is an automatic environment (actually battleground) where several alrogithms fight in the real time.
+**Programmers BattleGround** — визуальная арена, где алгоритмы (боты) управляют существами и сражаются в реальном времени. Каждый тик движка вызывает функцию `thinkAboutIt()` у каждого бота, передавая ему состояние мира. Бот анализирует обстановку и возвращает действие: двигаться, стрелять, прыгать, лечиться или использовать спецспособность.
 
-Each algorithm controls a creature (which can be bull, rhino, slug etc.) with an aim to grab bullets and hurt other creatures with it. By killing enemies your creature increases it's IQ, the smartest creatures lists in the leaderboard. Take a look at running PUBG [here](http://appcraft.pro/pubg/).
+Физику обеспечивает [Matter.js](https://brm.io/matter-js/) — 2D-движок без гравитации с реалистичными столкновениями.
 
-[![pubg](http://appcraft.pro/pubg/assets/pubg_scr_2.png)](http://appcraft.pro/pubg/)
+[![Arena](http://appcraft.pro/pubg/assets/pubg_scr_2.png)](http://appcraft.pro/projects/battleground/arena/)
 
-## How it can be used
+## Для кого этот проект
 
-1. If you're learning programming you can use PUBG to train your projection (from abstract thoughts to certain commands) skill.
+- **Обучение программированию** — писать AI-бота гораздо интереснее, чем рисовать параболу на экране
+- **Командные соревнования** — организуйте еженедельные баттлы в команде
+- **Преподавание** — лабораторная работа для демонстрации алгоритмов, конечных автоматов, систем принятия решений
 
-2. If you works in a team you can organize weekly battles and give pizza, beer or iPhone X to a winner.
+## Быстрый старт
 
-3. If you're a teacher you can use PUBG as a small lab to demonstrate basic algorithms and applied samples of programming knowledge. It's much more interesting to make a brain for a creature rather than to draw a parabola on a screen (in most cases).
+```bash
+# Клонировать репозиторий
+git clone https://github.com/AppCraft-LLC/pubg.git
+cd pubg
 
-## Fast start
+# Установить зависимости
+npm install
 
-1. Download the latest build.
+# Запустить dev-сервер (браузерный режим)
+npm run dev
+```
 
-2. Open `/brains/br_edmund.js` file for editing, read comments in it and change creature's logic to desired behavior.
+Откройте указанный URL в браузере — арена запустится автоматически.
 
-3. Open `/index.html` in your browser and see what you made. That's all.
-If you see just gray background and nothing else then check the console: may be the reason is `security error dom exception 18` error (occurs in last Safari versions). That's because brains files are loaded dynamically. Try another browser (Chrome) in this case.
+### Другие команды
 
-4. You can edit `cfg_sources` array in the `config.js` to exclude some brains by commenting them or add your own brain files.
+```bash
+npm run build        # Сборка для продакшена (dist/)
+npm run preview      # Превью собранной версии
+npm run headless     # Headless-режим (Node.js, без браузера)
+```
 
-5. You can also edit other consts in the `config.js` to change the rules of the game, e.g. set `shuffleBrains` to `false` to start the game with your brain first, or change `maxAliveCreatures` to battle with less or more enemies at the same time.
+## Как написать бота
 
-6. Read [documentation](https://github.com/AppCraft-LLC/pubg/wiki) to learn rules of the game, creatures specifications, examples and other details. Good luck !)
+Бот — это TypeScript-файл в `src/brains/`, экспортирующий объект с интерфейсом `Brain`:
 
-## License
+```typescript
+import type { Brain } from '../types';
 
-PUBG is distributed under the [MIT license](https://github.com/AppCraft-LLC/pubg/blob/master/LICENSE.md).
+const g = globalThis as any;
+
+const myBot: Brain = {
+  name: 'MyBot',           // Макс. 10 символов
+  kind: g.kinds.bear,      // Тип существа (определяет спрайт и спецспособность)
+  author: 'MyName',        // Макс. 10 символов
+  description: 'My smart bot',
+
+  thinkAboutIt(self, enemies, bullets, objects, events) {
+    // self     — состояние вашего существа
+    // enemies  — массив врагов на арене
+    // bullets  — все пули на карте
+    // objects  — препятствия, динамит, звёзды
+    // events   — события текущего тика (ранения, убийства, апгрейды)
+
+    // Пример: двигаться к ближайшему врагу
+    if (enemies.length > 0) {
+      const angle = g.angleBetween(self, enemies[0]);
+      return { do: g.actions.move, params: { angle } };
+    }
+
+    return { do: g.actions.none };
+  },
+};
+
+export default myBot;
+```
+
+После создания файла добавьте бота в `src/brains/index.ts`:
+
+```typescript
+import myBot from './myBot';
+
+export const allBrains: Brain[] = [
+  myBot,
+  // ... остальные боты
+];
+```
+
+## Входные данные (что видит бот)
+
+### self / enemies — существо
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `id` | `number` | Уникальный идентификатор |
+| `kills` | `number` | Количество убийств |
+| `deaths` | `number` | Количество смертей |
+| `iq` | `number` | Рейтинг интеллекта (персистентный) |
+| `name` | `string` | Имя бота |
+| `author` | `string` | Автор |
+| `lives` | `number` | Текущее здоровье |
+| `bullets` | `number` | Количество патронов |
+| `energy` | `number` | Энергия (восстанавливается каждый тик) |
+| `level` | `number` | Уровень (0-2) |
+| `position` | `{x, y}` | Позиция на арене |
+| `velocity` | `{x, y}` | Вектор скорости |
+| `angle` | `number` | Направление взгляда (радианы) |
+| `speed` | `number` | Скалярная скорость |
+| `angularVelocity` | `number` | Угловая скорость |
+| `poisoned` | `boolean` | Отравлен ли |
+| `spelling` | `boolean` | Использует ли заклинание |
+| `message` | `string\|null` | Отображаемое сообщение |
+
+### bullets — пуля
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `id` | `number` | Уникальный идентификатор |
+| `position` | `{x, y}` | Позиция |
+| `velocity` | `{x, y}` | Вектор скорости |
+| `speed` | `number` | Скалярная скорость |
+| `dangerous` | `boolean` | `true` если летит быстро (наносит урон) |
+
+### objects — игровой объект
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `id` | `number` | Уникальный идентификатор |
+| `position` | `{x, y}` | Позиция |
+| `velocity` | `{x, y}` | Вектор скорости |
+| `speed` | `number` | Скалярная скорость |
+| `bounds` | `{min, max}` | Границы объекта |
+| `condition` | `number` | Здоровье объекта |
+| `type` | `number` | 0 = препятствие, 1 = динамит, 2 = звезда |
+| `shape` | `number` | Подтип |
+
+### events — событие тика
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `type` | `number` | 0=ранение, 1=убийство, 2=смерть, 3=апгрейд, 4=рождение, 5=заклинание |
+| `payload` | `array` | Участники события |
+
+## Действия (что может делать бот)
+
+| Действие | Код | Параметры | Энергия | Эффект |
+|----------|-----|-----------|---------|--------|
+| `none` | 0 | `message?` | 0 | Ничего не делать |
+| `move` | 1 | `angle` | 1.0 | Движение в направлении |
+| `rotate` | 2 | `clockwise` | 0 | Вращение на месте |
+| `turn` | 3 | `angle` | 0 | Повернуться к направлению |
+| `shoot` | 4 | `message?` | 10 | Стрелять по направлению взгляда |
+| `jump` | 5 | `angle` | 30 | Прыжок в направлении |
+| `eat` | 6 | `message?` | 60 | Съесть пулю (+40 HP) |
+| `spell` | 7 | `target?, angle?` | 100* | Спецспособность вида |
+
+\* Стоимость spell зависит от вида существа. Телекинез (Bear) стоит всего 2 энергии.
+
+### Формат ответа
+
+```typescript
+return {
+  do: g.actions.move,    // Код действия
+  params: {
+    angle: 1.57,         // Направление (для move, turn, jump, spell)
+    clockwise: true,     // Для rotate
+    target: enemy,       // Для spell (объект с id)
+    message: 'Hello!',   // Сообщение (макс. 2 строки по 20 символов)
+  },
+};
+```
+
+## Виды существ
+
+Каждый вид определяет спрайт и спецспособность (`spell`):
+
+| # | Вид | Спецспособность | Энергия | Описание |
+|---|-----|-----------------|---------|----------|
+| 0 | **Rhino** | Магнит | 100 | Притягивает ближайшие пули к себе |
+| 1 | **Bear** | Телекинез | 2 | Толкает существо/объект в заданном направлении |
+| 2 | **Moose** | Невидимость | 100 | Становится невидимым на 80 тиков |
+| 3 | **Bull** | Неуязвимость | 100 | Неуязвим к урону на 80 тиков |
+| 4 | **Runchip** | Ядовитые пули | 100 | Пули наносят периодический урон |
+| 5 | **Miner** | Резиновые пули | 100 | Пули отскакивают от препятствий |
+| 6 | **Sprayer** | Вампир / Заморозка | 100 | Высасывает здоровье или замораживает врага |
+| 7 | **Splitpus** | — | — | Без спецспособности |
+
+## Вспомогательные функции
+
+Доступны через `globalThis` (или `g`):
+
+```typescript
+const g = globalThis as any;
+
+g.distanceBetween(obj1, obj2)           // Расстояние между двумя объектами (px)
+g.distanceBetweenPoints(pt1, pt2)       // Расстояние между двумя точками
+g.angleBetween(obj1, obj2)              // Угол от obj1 к obj2 (радианы)
+g.angleBetweenPoints(pt1, pt2)          // Угол между двумя точками
+g.normalizeAngle(angle)                 // Нормализация угла 0—2π
+g.differenceBetweenAngles(a1, a2)       // Кратчайшая разница между углами
+g.randomInt(min, max)                   // Случайное целое число
+g.randomAngle()                         // Случайный угол 0—2π
+g.rayBetween(obj1, obj2)               // Проверка видимости (true = видят друг друга)
+```
+
+### Глобальные константы
+
+```typescript
+g.ground = { width: 1024, height: 768 }        // Размеры арены
+g.creatureMaxLives = [100, 150, 250]            // Макс. HP по уровням
+g.creatureMaxEnergy = [100, 150, 250]           // Макс. энергия по уровням
+g.creatureMaxBullets = [3, 4, 5]                // Макс. пуль по уровням
+g.bulletDamage = 10                             // Урон одной пули
+g.livesPerEatenBullet = 40                      // HP за съеденную пулю
+g.moveEnergyCost = 1.0                          // Стоимость движения
+g.shotEnergyCost = 10                           // Стоимость выстрела
+g.jumpEnergyCost = 30                           // Стоимость прыжка
+g.eatBulletEnergyCost = 60                      // Стоимость поедания пули
+g.energyRefillPerTick = 0.8                     // Восстановление энергии за тик
+```
+
+## Правила игры
+
+### IQ (рейтинг)
+
+IQ — основная метрика успешности бота. Хранится между сессиями.
+
+- Начальный IQ: **10**
+- Убил врага с IQ <= своего (разница <= 10): **+1 IQ**
+- Убил врага с IQ > своего (разница > 10): **+1/3 разницы IQ**
+- Был убит: **-1 IQ** (или **-1/5 разницы** если убийца слабее на >10)
+- Самоубийство: **-3 IQ**
+
+### Уровни
+
+Существа повышают уровень за убийства в текущей жизни:
+
+| Уровень | Убийств для апгрейда | Макс. HP | Макс. энергия | Макс. пуль |
+|---------|---------------------|----------|---------------|------------|
+| 0 | — | 100 | 100 | 3 |
+| 1 | 2 убийства | 150 | 150 | 4 |
+| 2 | 4 убийства (суммарно) | 250 | 250 | 5 |
+
+### Генерация объектов
+
+- Пули появляются на арене с частотой, зависящей от числа существ
+- 15% шанс появления динамита вместо пули
+- 30% шанс появления звезды при уничтожении препятствия
+- Арена: **1024 x 768** пикселей, одновременно на поле до **4** существ
+
+## Боты (11 штук)
+
+### CC Opus — Bear, Телекинез
+**Автор:** Claude | **Сила:** 9/10
+
+Адаптивный AI с многофазной системой принятия решений. Анализирует траектории пуль для уклонения, использует телекинез (стоимость всего 2 энергии!) для отталкивания угроз, затягивания жертв и вталкивания врагов в стены. Система оценки угроз учитывает расстояние, вооружение, прицеливание и IQ противника.
+
+### Reptile — Runchip, Ядовитые пули
+**Автор:** vaskebjorn | **Сила:** 8/10
+
+Хитрый уклонист со сложным конечным автоматом. Переключает «тихий режим» каждые 60 секунд, отслеживает пули, проверяет линию видимости перед атакой. Игнорирует пули, которые долго не может подобрать.
+
+### nil-oultet — Sprayer, Вампир
+**Автор:** Andrey | **Сила:** 8/10
+
+Территориальный контролёр. Выбирает сектор арены и контролирует его, переключаясь между фазами патрулирования и атаки. Использует вампиризм для восстановления здоровья.
+
+### RatHorn — Rhino, Магнит
+**Автор:** BlackPeter | **Сила:** 8/10
+
+Мастер тактики hit & run. Находит слабейшего врага, стреляет и убегает на 15 тиков. Использует углы арены как безопасные позиции. Генерирует персонализированные сообщения для жертв.
+
+### Helltrain — Miner, Резиновые пули
+**Автор:** Devil | **Сила:** 7/10
+
+Демон с конечным автоматом состояний. Выбирает цель и переходит между фазами: подготовка, hellrage (агрессивная атака) и восстановление. Резиновые пули отскакивают от препятствий.
+
+### Dexter — Splitpus
+**Автор:** AppCraft | **Сила:** 6/10
+
+Мститель. Целится в существо с максимальным числом убийств. Имеет внутреннюю нарративную историю, отображаемую через сообщения.
+
+### Mindblast — Splitpus
+**Автор:** AppCraft | **Сила:** 6/10
+
+IQ-охотник. Целится во врага с максимальным IQ — убийство высокоинтеллектуального врага даёт больше IQ. Режим «тройного выстрела» при полном боезапасе.
+
+### Hodor — Moose, Невидимость
+**Автор:** Martin | **Сила:** 5/10
+
+Убивает тех, кто много говорит. Отслеживает сообщения врагов и целится в самого болтливого. Использует невидимость для скрытного приближения.
+
+### UtilizatoR — Miner, Резиновые пули
+**Автор:** macMini | **Сила:** 5/10
+
+Умный охотник — выбирает цель с наибольшим количеством патронов. Логика: у вооружённого врага больше причин быть уничтоженным.
+
+### BULLetBULL — Bull, Неуязвимость
+**Автор:** Urist | **Сила:** 3/10
+
+Живая турель. Собирает пули до максимума (используя неуязвимость для безопасного сбора), идёт в центр карты и начинает вращаться, стреляя в каждого, кто попадает в линию прицела.
+
+### Pacifist — Moose, Невидимость
+**Автор:** AppCraft | **Сила:** 2/10
+
+Никогда не стреляет. Только собирает пули и ест их для лечения. Становится невидимым при пустом боезапасе. Уникальная философия ненасилия.
+
+## Архитектура проекта
+
+```
+pubg/
+├── src/
+│   ├── main.ts                  # Браузерная точка входа
+│   ├── headless.ts              # Node.js headless-режим
+│   ├── config.ts                # Типизированная конфигурация
+│   │
+│   ├── types/                   # TypeScript-интерфейсы
+│   │   ├── brain.ts             # Brain, Action
+│   │   ├── creature.ts          # CreatureView
+│   │   ├── bullet.ts            # BulletView
+│   │   ├── game-object.ts       # GameObjectView
+│   │   ├── event.ts             # GameEvent
+│   │   └── enums.ts             # Kind, ActionType, EventType
+│   │
+│   ├── engine/                  # Игровой движок (работает без рендера)
+│   │   ├── Engine.ts            # Главный цикл
+│   │   ├── Physics.ts           # Обёртка Matter.js
+│   │   ├── Combat.ts            # Логика боя и урона
+│   │   ├── Spawner.ts           # Генерация объектов
+│   │   ├── IQSystem.ts          # Расчёт IQ-рейтинга
+│   │   └── CreatureManager.ts   # Управление существами
+│   │
+│   ├── renderer/                # Визуализация (только браузер)
+│   │   ├── Renderer.ts          # Canvas-рендер
+│   │   ├── Leaderboard.ts       # Таблица лидеров
+│   │   └── UI.ts                # Кнопки управления
+│   │
+│   ├── brains/                  # Боты (11 штук)
+│   │   ├── index.ts             # Реестр всех ботов
+│   │   ├── opus.ts              # CC Opus — Bear, телекинез
+│   │   ├── reptile.ts           # Reptile — Runchip, ядовитые пули
+│   │   ├── niloultet.ts         # nil-oultet — Sprayer, вампир
+│   │   ├── rathorn.ts           # RatHorn — Rhino, магнит
+│   │   ├── helltrain.ts         # Helltrain — Miner, резиновые пули
+│   │   ├── dexter.ts            # Dexter — Splitpus, мститель
+│   │   ├── mindblast.ts         # Mindblast — Splitpus, IQ-охотник
+│   │   ├── hodor.ts             # Hodor — Moose, невидимость
+│   │   ├── utilizator.ts        # UtilizatoR — Miner, резиновые пули
+│   │   ├── bulletbull.ts        # BULLetBULL — Bull, неуязвимость
+│   │   └── pacifist.ts          # Pacifist — Moose, невидимость
+│   │
+│   └── utils/                   # Утилиты
+│       ├── geometry.ts          # distanceBetween, angleBetween и др.
+│       └── helpers.ts           # randomInt, randomAngle и др.
+│
+├── public/img/                  # Спрайты (существа, эффекты, препятствия)
+├── data/leaderboard.json        # Серверный рейтинг (ночные прогоны)
+├── index.html                   # Vite HTML-точка входа
+├── vite.config.ts               # Конфигурация сборщика
+├── tsconfig.json                # Настройки TypeScript
+└── package.json                 # Зависимости и скрипты
+```
+
+### Разделение движка и рендера
+
+Движок (`src/engine/`) работает без рендера — это позволяет запускать симуляцию в Node.js (headless-режим) для ночных прогонов рейтинга. Рендер (`src/renderer/`) используется только в браузере.
+
+## Конфигурация
+
+Все параметры игры находятся в `src/config.ts`. Ключевые настройки:
+
+| Параметр | Значение | Описание |
+|----------|----------|----------|
+| `maxAliveCreatures` | 4 | Одновременно на арене |
+| `bulletDamage` | 10 | Урон пули |
+| `livesPerEatenBullet` | 40 | HP за съеденную пулю |
+| `energyRefillPerTick` | 0.8 | Восстановление энергии |
+| `obstaclesDensity` | 100 | 1 объект на N килопикселей |
+| `dynamitesProbability` | 0.15 | Шанс динамита |
+| `starsProbability` | 0.3 | Шанс звезды |
+
+## Docker и headless-режим
+
+### Headless-прогон
+
+```bash
+npm run headless
+```
+
+Запускает движок без графики в Node.js. Прогоняет заданное число тиков и сохраняет результаты в `data/leaderboard.json`.
+
+### Docker
+
+```bash
+docker-compose up
+```
+
+Контейнер запускает headless-прогон и записывает результаты. Используется для ночных автоматических прогонов рейтинга (cron / systemd timer).
+
+## Лицензия
+
+Programmers BattleGround распространяется под лицензией [MIT](LICENSE.md).
+
+**Оригинальный проект:** [AppCraft-LLC/pubg](https://github.com/AppCraft-LLC/pubg)
