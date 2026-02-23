@@ -102,6 +102,10 @@ export class GameEngine {
   private maxObstaclesAmount: number;
   private exploded = false;
 
+  // -- loopStep gating: game logic runs every 10th physics tick (original lines 92, 779-795) --
+  private loopCounter = -1;
+  private readonly LOOP_STEP = 0.1;
+
   // -- Leaderboard management --
   private fullLeaderboard = false;
   private leaderboardCounter = 0;
@@ -323,22 +327,44 @@ export class GameEngine {
     const obstacles = this.spawner.obstacles;
     const cfg = this.config;
 
-    // -- Step 0: Handle deferred forces from explosions --
-    if (this.exploded) {
-      this.exploded = false;
-      const applyForce = (it: { body: Matter.Body; force: { x: number; y: number } | null }) => {
-        if (it.force) {
-          Matter.Body.applyForce(it.body, it.body.position, it.force);
-          it.force = null;
-        }
+    // -----------------------------------------------------------------------
+    // loopStep gate (from battleground.js lines 779-795):
+    // Game logic only runs every 10th physics tick. Physics always steps.
+    // This matches the original rhythm where loopStep=0.1, loopCounter
+    // starts at -1 and resets to -1 after reaching 0.
+    // -----------------------------------------------------------------------
+
+    this.loopCounter += this.LOOP_STEP;
+
+    if (this.loopCounter < 0) {
+      // Non-logic tick: only handle deferred explosion forces
+      if (this.exploded) {
+        this.exploded = false;
+        const applyForce = (it: { body: Matter.Body; force: { x: number; y: number } | null }) => {
+          if (it.force) {
+            Matter.Body.applyForce(it.body, it.body.position, it.force);
+            it.force = null;
+          }
+        };
+        creatures.forEach(applyForce);
+        obstacles.forEach(applyForce);
+        bullets.forEach(applyForce);
+      }
+
+      // Always step physics
+      this.physics.update(delta);
+
+      return {
+        creatures,
+        bullets,
+        obstacles,
+        brains: this.creatureManager.brains,
+        arena: cfg.arena,
       };
-      creatures.forEach(applyForce);
-      obstacles.forEach(applyForce);
-      bullets.forEach(applyForce);
     }
 
-    // -- Step 1: Physics update --
-    this.physics.update(delta);
+    // Logic tick — reset counter
+    this.loopCounter = -1;
 
     // -- Step 2: Leaderboard counter --
     if (this.leaderboardCounter > 0 && --this.leaderboardCounter < 1) {
@@ -377,7 +403,6 @@ export class GameEngine {
       // Spell counter
       if (it.counter > 0) {
         if (--it.counter <= 0) {
-          // BUG FIX: original had `it.counter == 0` (comparison, not assignment)
           it.counter = 0;
           if (it.invisible) {
             it.invisible = false;
@@ -559,6 +584,9 @@ export class GameEngine {
 
     // -- Step 10: Clear tick events --
     this.eventBus.clearTick();
+
+    // -- Step 11: Physics update (after game logic, matching original beforeUpdate order) --
+    this.physics.update(delta);
 
     // -- Return snapshot --
     return {

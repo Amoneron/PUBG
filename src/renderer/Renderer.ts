@@ -201,27 +201,29 @@ export class Renderer {
     const render = (body as any).render;
     const tex: string | undefined = render?.sprite?.texture;
 
-    const w = body.bounds.max.x - body.bounds.min.x;
-    const h = body.bounds.max.y - body.bounds.min.y;
-
     if (tex) {
       const img = this.loadSprite(tex);
       if (img.complete && img.naturalWidth > 0) {
         ctx.save();
         ctx.translate(pos.x, pos.y);
         ctx.rotate(angle);
+        // Draw at natural image dimensions (matching original Matter.js Render).
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
         ctx.drawImage(img, -w / 2, -h / 2, w, h);
         ctx.restore();
         return;
       }
     }
 
-    // Fallback: grey rectangle
+    // Fallback: grey rectangle using body bounds
+    const bw = body.bounds.max.x - body.bounds.min.x;
+    const bh = body.bounds.max.y - body.bounds.min.y;
     ctx.save();
     ctx.translate(pos.x, pos.y);
     ctx.rotate(angle);
     ctx.fillStyle = '#666';
-    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
     ctx.restore();
   }
 
@@ -289,8 +291,11 @@ export class Renderer {
         ctx.save();
         ctx.translate(pos.x, pos.y);
         ctx.rotate(angle);
-        const size = 60; // 2 * creature radius (30px)
-        ctx.drawImage(img, -size / 2, -size / 2, size, size);
+        // Draw at natural image dimensions (matching original Matter.js Render behaviour).
+        // Sprites are not square — forcing 60×60 distorts non-square images.
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
         ctx.restore();
       } else {
         // Fallback: coloured circle
