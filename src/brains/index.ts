@@ -1,6 +1,6 @@
 import type { Brain } from '../types';
 
-// Import all bots (11 total: 10 strongest + Pacifist)
+// Import all bots (12 total)
 import opus from './opus';
 import bulletbull from './bulletbull';
 import dexter from './dexter';
