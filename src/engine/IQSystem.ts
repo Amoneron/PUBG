@@ -20,6 +20,14 @@ export class LocalStorageIQStorage implements IQStorage {
 export class FileIQStorage implements IQStorage {
   private data: Map<string, number> = new Map();
 
+  constructor(initialData?: Record<string, number>) {
+    if (initialData) {
+      for (const [k, v] of Object.entries(initialData)) {
+        if (typeof v === 'number') this.data.set(k, v);
+      }
+    }
+  }
+
   load(brainId: string): number | null {
     return this.data.get(brainId) ?? null;
   }
