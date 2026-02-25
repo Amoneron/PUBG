@@ -13,9 +13,10 @@ import helltrain from './helltrain';
 import niloultet from './niloultet';
 import utilizator from './utilizator';
 import meowstraponius from './meowstraponius';
+import aegisprime from './aegisprime';
 
 export const allBrains: Brain[] = [
   opus, reptile, niloultet, rathorn, helltrain,
   dexter, mindblast, hodor, utilizator, bulletbull,
-  pacifist, meowstraponius,
+  pacifist, meowstraponius, aegisprime,
 ];
