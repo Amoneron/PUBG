@@ -25,5 +25,8 @@ Thumbs.db
 .env
 .env.*
 
+# Temporary files
+tmp/
+
 # Deployment credentials
 .deploy.md
