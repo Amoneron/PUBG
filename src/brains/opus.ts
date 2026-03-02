@@ -1,30 +1,27 @@
-import type { Brain } from '../types';
+import type { Brain, Action } from '../types';
 
 const g = globalThis as any;
 
 // ---------------------------------------------------------------------------
-// Module-level state (persists across ticks, resets on new creature spawn)
+// Module-level state (persists across ticks, resets on page reload)
 // ---------------------------------------------------------------------------
 let tickCount = 0;
-let lastTkTargetId: number | null = null;
-let lastTkTick = 0;
-let lastKillName: string | null = null;
-let lastKillTick = 0;
+let pursuedBulletId: number | null = null;
+let pursuedBulletTick = 0;
+let bulletIgnoreList: number[] = [];
+const BULLET_IGNORE_TIMEOUT = 150; // ~15 seconds at 10 ticks/sec
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Arena dimensions shortcut */
 const W = () => g.ground.width as number;
 const H = () => g.ground.height as number;
-
-/** Max values for a given level */
-const maxLives  = (lvl: number): number => g.creatureMaxLives[lvl];
+const maxLives = (lvl: number): number => g.creatureMaxLives[lvl];
 const maxEnergy = (lvl: number): number => g.creatureMaxEnergy[lvl];
 const maxBullets = (lvl: number): number => g.creatureMaxBullets[lvl];
 
-/** Check if a dangerous bullet is heading toward a point (trajectory analysis) */
+/** Check if a dangerous bullet is heading toward a point */
 function bulletHeadingToward(bullet: any, pos: any, threshold: number): boolean {
   if (!bullet.dangerous) return false;
   const bulletAngle = Math.atan2(bullet.velocity.y, bullet.velocity.x);
@@ -45,58 +42,52 @@ function distToWall(pos: any): number {
   return Math.min(pos.x, pos.y, W() - pos.x, H() - pos.y);
 }
 
-/** Threat score for prioritizing enemies */
-function threatScore(self: any, enemy: any): number {
-  const dist = g.distanceBetween(self, enemy);
-  const aiming = isAimingAt(enemy, self.position, Math.PI / 6) ? 30 : 0;
-  return (1 / Math.max(dist, 1)) * 400 + enemy.bullets * 15 + aiming + enemy.iq * 0.5;
+/** IQ reward for killing a target (0 = not worth it) */
+function iqReward(selfIq: number, enemyIq: number): number {
+  const diff = enemyIq - selfIq;
+  if (diff > 10) return diff / 3;       // big reward for killing stronger
+  if (diff >= -10) return 1;             // normal reward
+  return 0;                              // no reward for killing much weaker
+}
+
+/** Choose dodge direction that goes away from walls */
+function bestDodgeAngle(self: any, bulletAngle: number): number {
+  const perp1 = bulletAngle + Math.PI / 2;
+  const perp2 = bulletAngle - Math.PI / 2;
+  // Pick direction that moves us further from nearest wall
+  const pos1 = { x: self.position.x + Math.cos(perp1) * 50, y: self.position.y + Math.sin(perp1) * 50 };
+  const pos2 = { x: self.position.x + Math.cos(perp2) * 50, y: self.position.y + Math.sin(perp2) * 50 };
+  return distToWall(pos1) > distToWall(pos2) ? perp1 : perp2;
 }
 
 // ---------------------------------------------------------------------------
-// CC Opus — Bear (Telekinesis) — Multi-Phase Adaptive Controller
+// CC Opus v2 — Runchip (Poison Bullets) — Aggressive Poison Striker
 // ---------------------------------------------------------------------------
 
 const opus: Brain = {
 
   name: 'CC Opus',
-  kind: g.kinds.bear,
+  kind: g.kinds.runchip,
   author: 'Claude',
-  description: 'Adaptive AI with trajectory analysis, threat scoring, and telekinetic mind control. Thinks several moves ahead.',
+  description: 'Venomous predator. Poisons targets for 60 HP total damage per bullet. IQ-optimized target selection.',
 
-  thinkAboutIt(self, enemies, bullets, objects, events) {
+  thinkAboutIt(self, enemies, bullets, objects, events): Action {
     tickCount++;
 
-    // Track kills for messages
-    for (const ev of events) {
-      if ((ev as any).type === 1 && (ev as any).payload?.[0]?.id === self.id) {
-        lastKillName = (ev as any).payload[1]?.name ?? 'unknown';
-        lastKillTick = tickCount;
-      }
-    }
+    const myMaxLives = maxLives(self.level);
+    const myMaxBullets = maxBullets(self.level);
 
-    // Show kill message for a few ticks
-    if (lastKillName && tickCount - lastKillTick < 40) {
-      // continue with strategy, message will be attached
-    }
-
-    const msg = (text: string): string => {
-      if (lastKillName && tickCount - lastKillTick < 40) {
-        return 'Checkmate, ' + lastKillName;
-      }
-      return text;
-    };
-
-    // -----------------------------------------------------------------------
-    // 1. DODGE — Detect dangerous bullets heading toward us
-    // -----------------------------------------------------------------------
-    const dangerRadius = 180;
+    // =======================================================================
+    // PHASE 0: DODGE — evade dangerous bullets
+    // =======================================================================
+    const dangerRadius = 200;
     let nearestDanger: any = null;
     let nearestDangerDist = Infinity;
 
     for (const bullet of bullets) {
       if (!bullet.dangerous) continue;
       const dist = g.distanceBetween(self, bullet);
-      if (dist < dangerRadius && bulletHeadingToward(bullet, self.position, Math.PI / 20)) {
+      if (dist < dangerRadius && bulletHeadingToward(bullet, self.position, Math.PI / 10)) {
         if (dist < nearestDangerDist) {
           nearestDangerDist = dist;
           nearestDanger = bullet;
@@ -106,148 +97,126 @@ const opus: Brain = {
 
     if (nearestDanger) {
       const bulletAngle = Math.atan2(nearestDanger.velocity.y, nearestDanger.velocity.x);
-      const dodgeAngle = bulletAngle + Math.PI / 2;
+      const dodgeAngle = bestDodgeAngle(self, bulletAngle);
 
-      // Jump if we have energy and bullet is close
-      if (nearestDangerDist < 120 && self.energy >= g.jumpEnergyCost) {
-        return { do: g.actions.jump, params: { angle: dodgeAngle, message: msg('Trajectory dodged') } };
+      if (nearestDangerDist < 100 && self.energy >= g.jumpEnergyCost) {
+        return { do: g.actions.jump, params: { angle: dodgeAngle } };
       }
-      // Otherwise move perpendicular
-      return { do: g.actions.move, params: { angle: dodgeAngle, message: msg('Evading...') } };
+      return { do: g.actions.move, params: { angle: dodgeAngle } };
     }
 
-    // -----------------------------------------------------------------------
-    // 2. HEAL (critical) — Eat bullet when HP < 40% of max
-    // -----------------------------------------------------------------------
-    if (self.lives < maxLives(self.level) * 0.4 && self.bullets > 0 && self.energy >= g.eatBulletEnergyCost) {
-      return { do: g.actions.eat, params: { message: msg('Recalibrating...') } };
+    // =======================================================================
+    // PHASE 1: CRITICAL HEAL — eat bullet when HP critically low
+    // =======================================================================
+    const hpPercent = self.lives / myMaxLives;
+
+    if (hpPercent < 0.3 && self.bullets > 0 && self.energy >= g.eatBulletEnergyCost) {
+      return { do: g.actions.eat, params: { message: 'Recalibrating...' } };
     }
 
-    // -----------------------------------------------------------------------
-    // 3. TELEKINESIS — Use bear's cheap spell (2 energy!) strategically
-    // -----------------------------------------------------------------------
-    if (self.level >= 1 && self.energy >= g.telekinesisEnergyCost && enemies.length > 0) {
-      // Avoid spamming same target every tick
-      const tkCooldown = tickCount - lastTkTick >= 3;
+    // Poisoned AND HP < 50%: eat to cure poison + heal
+    if (self.poisoned && hpPercent < 0.5 && self.bullets > 0 && self.energy >= g.eatBulletEnergyCost) {
+      return { do: g.actions.eat, params: { message: 'Antidote' } };
+    }
 
-      // Sort enemies by threat
-      const byThreat = [...enemies].sort((a, b) => threatScore(self, b) - threatScore(self, a));
-
-      for (const enemy of byThreat) {
-        if (!tkCooldown && enemy.id === lastTkTargetId) continue;
-        if (!g.rayBetween(self, enemy)) continue;
-
-        const dist = g.distanceBetween(self, enemy);
-        const angleToEnemy = g.angleBetween(self, enemy);
-
-        // 3a. Push armed threat AWAY if close and aiming at us
-        if (dist < 200 && enemy.bullets > 0 && isAimingAt(enemy, self.position, Math.PI / 8)) {
-          const pushAngle = g.angleBetween(self, enemy); // push away from us
-          lastTkTargetId = enemy.id;
-          lastTkTick = tickCount;
-          return {
-            do: g.actions.spell,
-            params: { target: enemy, angle: pushAngle, message: msg('Mind over matter') },
-          };
-        }
-
-        // 3b. Push enemy INTO wall if they're near an edge
-        const eDist = distToWall(enemy.position);
-        if (eDist < 150 && dist < 400) {
-          // Push toward the nearest wall
-          let pushAngle: number;
-          const ex = enemy.position.x;
-          const ey = enemy.position.y;
-          if (ex < eDist + 1) pushAngle = Math.PI; // push left
-          else if (ex > W() - eDist - 1) pushAngle = 0; // push right
-          else if (ey < eDist + 1) pushAngle = -Math.PI / 2; // push up
-          else pushAngle = Math.PI / 2; // push down
-
-          lastTkTargetId = enemy.id;
-          lastTkTick = tickCount;
-          return {
-            do: g.actions.spell,
-            params: { target: enemy, angle: pushAngle, message: msg('Mind over matter') },
-          };
-        }
-
-        // 3c. Pull killable target toward us if out of shooting range
-        if (dist > 300 && self.bullets > 0 && self.bullets * g.bulletDamage >= enemy.lives) {
-          const pullAngle = angleToEnemy + Math.PI; // toward us
-          lastTkTargetId = enemy.id;
-          lastTkTick = tickCount;
-          return {
-            do: g.actions.spell,
-            params: { target: enemy, angle: pullAngle, message: msg('Come closer...') },
-          };
-        }
+    // =======================================================================
+    // PHASE 2: ACTIVATE POISON — cast spell when conditions are right
+    // =======================================================================
+    if (
+      self.level >= 1 &&
+      !self.spelling &&
+      self.energy >= 110 &&
+      enemies.length > 0
+    ) {
+      // Only activate if we have ammo or a safe bullet nearby
+      const hasSafeBulletNearby = bullets.some(
+        (b: any) => !b.dangerous && g.distanceBetween(self, b) < 200
+      );
+      if (self.bullets > 0 || hasSafeBulletNearby) {
+        return { do: g.actions.spell, params: { message: 'Venom loaded' } };
       }
     }
 
-    // -----------------------------------------------------------------------
-    // 4. ATTACK — Engage killable targets
-    // -----------------------------------------------------------------------
+    // =======================================================================
+    // PHASE 3: GUARANTEED KILL — engage targets we can finish off
+    // =======================================================================
     if (self.bullets > 0 && self.energy >= g.shotEnergyCost && enemies.length > 0) {
-      // Find best killable target (bullets * damage >= enemy.lives)
-      let bestTarget: any = null;
-      let bestScore = -1;
-
+      // Find killable targets (our bullets * damage >= their HP)
+      const killable: any[] = [];
       for (const enemy of enemies) {
         if (self.bullets * g.bulletDamage >= enemy.lives) {
-          const score = threatScore(self, enemy);
-          if (score > bestScore) {
-            bestScore = score;
-            bestTarget = enemy;
+          const reward = iqReward(self.iq, enemy.iq);
+          if (reward > 0) {
+            killable.push({ enemy, reward, dist: g.distanceBetween(self, enemy) });
           }
         }
       }
 
-      // If no killable target, pick highest threat anyway
-      if (!bestTarget) {
-        for (const enemy of enemies) {
-          const score = threatScore(self, enemy);
-          if (score > bestScore) {
-            bestScore = score;
-            bestTarget = enemy;
-          }
-        }
-      }
+      // Sort: highest IQ reward first, then closest
+      killable.sort((a: any, b: any) => {
+        if (b.reward !== a.reward) return b.reward - a.reward;
+        return a.dist - b.dist;
+      });
 
-      if (bestTarget) {
-        const angle = g.angleBetween(self, bestTarget);
-        const dist = g.distanceBetween(self, bestTarget);
+      for (const k of killable) {
+        const enemy = k.enemy;
+        const dist = k.dist;
+        const angle = g.angleBetween(self, enemy);
         const aimDiff = Math.abs(g.differenceBetweenAngles(self.angle, angle));
-        const tolerance = Math.PI / 35;
+        const tolerance = Math.PI / 25;
 
-        // Check line of sight
-        if (!g.rayBetween(self, bestTarget)) {
-          return { do: g.actions.move, params: { angle: angle, message: msg('Repositioning...') } };
+        if (!g.rayBetween(self, enemy)) {
+          return { do: g.actions.move, params: { angle, message: 'Flanking...' } };
         }
 
-        // Close enough and aimed — shoot
         if (dist < 350 && aimDiff < tolerance) {
-          return { do: g.actions.shoot, params: { message: msg('Calculating...') } };
+          return { do: g.actions.shoot, params: { message: 'Checkmate' } };
         }
 
-        // Need to aim
         if (dist < 350) {
-          return { do: g.actions.turn, params: { angle: angle, message: msg('Locking on...') } };
+          return { do: g.actions.turn, params: { angle, message: 'Locking...' } };
         }
 
-        // Need to approach
-        return { do: g.actions.move, params: { angle: angle, message: msg('Approaching...') } };
+        return { do: g.actions.move, params: { angle, message: 'Closing in...' } };
       }
     }
 
-    // -----------------------------------------------------------------------
-    // 5. COLLECT — Find best safe bullet
-    // -----------------------------------------------------------------------
-    if (self.bullets < maxBullets(self.level)) {
+    // =======================================================================
+    // PHASE 4: EVASION — dodge armed enemies aiming at us
+    // =======================================================================
+    for (const enemy of enemies) {
+      if (
+        enemy.bullets > 0 &&
+        g.distanceBetween(self, enemy) < 300 &&
+        g.rayBetween(self, enemy) &&
+        isAimingAt(enemy, self.position, Math.PI / 12)
+      ) {
+        const escapeAngle = g.angleBetween(enemy, self) + Math.PI / 4;
+        return { do: g.actions.move, params: { angle: escapeAngle } };
+      }
+    }
+
+    // =======================================================================
+    // PHASE 5: MODERATE HEAL — eat if room for healing
+    // =======================================================================
+    if (
+      self.lives < myMaxLives - g.livesPerEatenBullet &&
+      self.bullets > 0 &&
+      self.energy >= g.eatBulletEnergyCost
+    ) {
+      return { do: g.actions.eat, params: { message: 'Regenerating...' } };
+    }
+
+    // =======================================================================
+    // PHASE 6: COLLECT AMMO — pick up safe bullets
+    // =======================================================================
+    if (self.bullets < myMaxBullets) {
       let bestBullet: any = null;
-      let bestBulletScore = Infinity;
+      let bestScore = Infinity;
 
       for (const bullet of bullets) {
         if (bullet.dangerous) continue;
+        if (bulletIgnoreList.indexOf(bullet.id) >= 0) continue;
         if (!g.rayBetween(self, bullet)) continue;
 
         const distToMe = g.distanceBetween(self, bullet);
@@ -259,67 +228,113 @@ const opus: Brain = {
           if (d < minEnemyDist) minEnemyDist = d;
         }
 
-        // Score: closer to us is better, closer to enemies is worse
-        const score = distToMe - minEnemyDist * 0.5;
-        if (score < bestBulletScore) {
-          bestBulletScore = score;
+        const score = distToMe - minEnemyDist * 0.3;
+        if (score < bestScore) {
+          bestScore = score;
           bestBullet = bullet;
         }
       }
 
       if (bestBullet) {
+        // Track pursuit timeout
+        if (pursuedBulletId !== bestBullet.id) {
+          pursuedBulletId = bestBullet.id;
+          pursuedBulletTick = tickCount;
+        } else if (tickCount - pursuedBulletTick > BULLET_IGNORE_TIMEOUT) {
+          bulletIgnoreList.push(bestBullet.id);
+          pursuedBulletId = null;
+          pursuedBulletTick = 0;
+        }
+
         const angle = g.angleBetween(self, bestBullet);
-        return { do: g.actions.move, params: { angle: angle, message: msg('Acquiring ammo...') } };
+        return { do: g.actions.move, params: { angle, message: 'Arming...' } };
       }
     }
 
-    // -----------------------------------------------------------------------
-    // 6. HEAL (moderate) — Eat if HP < max - 40 and have bullets
-    // -----------------------------------------------------------------------
-    if (self.lives < maxLives(self.level) - g.livesPerEatenBullet && self.bullets > 0 && self.energy >= g.eatBulletEnergyCost) {
-      return { do: g.actions.eat, params: { message: msg('Recalibrating...') } };
+    // =======================================================================
+    // PHASE 7: OPPORTUNISTIC ATTACK — poison strike even without kill guarantee
+    // =======================================================================
+    if (
+      self.spelling &&
+      self.bullets > 0 &&
+      self.energy >= g.shotEnergyCost &&
+      enemies.length > 0
+    ) {
+      // Target: highest IQ enemy with positive reward and LOS
+      let bestTarget: any = null;
+      let bestReward = 0;
+
+      for (const enemy of enemies) {
+        const reward = iqReward(self.iq, enemy.iq);
+        if (reward <= 0) continue;
+        if (!g.rayBetween(self, enemy)) continue;
+        if (g.distanceBetween(self, enemy) > 400) continue;
+
+        if (reward > bestReward) {
+          bestReward = reward;
+          bestTarget = enemy;
+        }
+      }
+
+      if (bestTarget) {
+        const angle = g.angleBetween(self, bestTarget);
+        const dist = g.distanceBetween(self, bestTarget);
+        const aimDiff = Math.abs(g.differenceBetweenAngles(self.angle, angle));
+        const tolerance = Math.PI / 25;
+
+        if (dist < 350 && aimDiff < tolerance) {
+          return { do: g.actions.shoot, params: { message: 'Venom strike' } };
+        }
+        if (dist < 350) {
+          return { do: g.actions.turn, params: { angle, message: 'Targeting...' } };
+        }
+        return { do: g.actions.move, params: { angle, message: 'Stalking...' } };
+      }
     }
 
-    // -----------------------------------------------------------------------
-    // 7. POSITION — Move away from walls toward center if near edge
-    // -----------------------------------------------------------------------
+    // =======================================================================
+    // PHASE 8: COLLECT STARS — level up faster
+    // =======================================================================
+    if (self.level < 2) {
+      for (const obj of objects) {
+        if ((obj as any).type === 2) { // star
+          if (g.rayBetween(self, obj)) {
+            const angle = g.angleBetween(self, obj);
+            return { do: g.actions.move, params: { angle, message: 'Evolving...' } };
+          }
+        }
+      }
+    }
+
+    // =======================================================================
+    // PHASE 9: POSITIONING — stay away from walls, move toward bullet clusters
+    // =======================================================================
     const wallDist = distToWall(self.position);
     if (wallDist < 80) {
       const center = { x: W() / 2, y: H() / 2 };
       const angle = g.angleBetweenPoints(self.position, center);
-      return { do: g.actions.move, params: { angle: angle, message: msg('Repositioning...') } };
+      return { do: g.actions.move, params: { angle } };
     }
 
-    // -----------------------------------------------------------------------
-    // 8. EVADE — Dodge if armed enemy is aiming at us
-    // -----------------------------------------------------------------------
-    for (const enemy of enemies) {
-      if (enemy.bullets > 0 && g.distanceBetween(self, enemy) < 350 && isAimingAt(enemy, self.position, Math.PI / 12)) {
-        const escapeAngle = g.angleBetween(enemy, self) + Math.PI / 4;
-        return { do: g.actions.move, params: { angle: escapeAngle, message: msg('Evasive maneuver') } };
+    // Move toward cluster of safe bullets if idle
+    const safeBullets = bullets.filter((b: any) => !b.dangerous);
+    if (safeBullets.length > 0) {
+      // Find centroid of safe bullets
+      let cx = 0, cy = 0;
+      for (const b of safeBullets) {
+        cx += b.position.x;
+        cy += b.position.y;
       }
+      cx /= safeBullets.length;
+      cy /= safeBullets.length;
+      const angle = g.angleBetweenPoints(self.position, { x: cx, y: cy });
+      return { do: g.actions.move, params: { angle } };
     }
 
-    // -----------------------------------------------------------------------
-    // 9. HUNT — Move toward weakest enemy if armed
-    // -----------------------------------------------------------------------
-    if (self.bullets > 0 && enemies.length > 0) {
-      let weakest = enemies[0];
-      for (const enemy of enemies) {
-        if (enemy.lives < weakest.lives) {
-          weakest = enemy;
-        }
-      }
-      const angle = g.angleBetween(self, weakest);
-      return { do: g.actions.move, params: { angle: angle, message: msg('Hunting...') } };
-    }
-
-    // -----------------------------------------------------------------------
-    // 10. IDLE — Nothing to do, hold position
-    // -----------------------------------------------------------------------
-    const idleMessages = ['Analyzing...', 'Calculating...', 'Processing...', 'Observing...'];
-    const idleMsg = idleMessages[tickCount % idleMessages.length];
-    return { do: g.actions.none, params: { message: msg(idleMsg) } };
+    // =======================================================================
+    // PHASE 10: IDLE
+    // =======================================================================
+    return { do: g.actions.none, params: { message: 'Calculating...' } };
   },
 };
 
