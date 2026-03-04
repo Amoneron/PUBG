@@ -19,6 +19,32 @@ const g = globalThis as any;
 
 let tick = 0;
 
+// --- Sun Tzu quotes ---
+const Q_ATTACK = [
+  "Война — это\nпуть обмана",
+  "Разбей замыслы\nпротивника",
+  "Победа — в\nнападении",
+  "Побеждай\nбез сражения",
+  "Атакуй, когда\nнет выхода",
+  "Знай врага\nи знай себя",
+];
+const Q_DEFENSE = [
+  "Непобедимость\nв себе самом",
+  "Неуязвимость —\nв обороне",
+  "В порядке жди\nбеспорядка",
+  "Не жди, что враг\nне придёт",
+];
+const Q_STALK = [
+  "Друзей — близко\nврагов — ближе",
+  "Полного сил\nутоми",
+  "В хаосе рождается\nвозможность",
+  "Быстрота —\nсуть войны",
+  "Настоящая цель\nвойны — мир",
+];
+function q(arr: string[]): string {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 // Bullet pursuit anti-stall
 let pursuedBulletId: number | null = null;
 let pursuedBulletTick = 0;
@@ -90,7 +116,7 @@ function engageTarget(self: any, target: any, maxRange: number): Action {
 
   const aimDiff = Math.abs(g.differenceBetweenAngles(self.angle, aimAngle));
   if (aimDiff < tol) {
-    return { do: g.actions.shoot };
+    return { do: g.actions.shoot, params: { message: q(Q_ATTACK) } };
   }
 
   if (dist < 350) {
@@ -169,7 +195,7 @@ const narciss: Brain = {
         const dist = g.distanceBetween(self, b);
         if (dist < 200 && bulletComingAtMe(b, self, PI / 12)) {
           const bAngle = Math.atan2(b.velocity.y, b.velocity.x);
-          return { do: g.actions.move, params: { angle: smartDodge(self, bAngle) } };
+          return { do: g.actions.move, params: { angle: smartDodge(self, bAngle), message: q(Q_DEFENSE) } };
         }
       }
     } else {
@@ -178,7 +204,7 @@ const narciss: Brain = {
         const dist = g.distanceBetween(self, b);
         if (dist < 100 && bulletComingAtMe(b, self, PI / 15)) {
           const bAngle = Math.atan2(b.velocity.y, b.velocity.x);
-          return { do: g.actions.move, params: { angle: smartDodge(self, bAngle) } };
+          return { do: g.actions.move, params: { angle: smartDodge(self, bAngle), message: q(Q_DEFENSE) } };
         }
       }
     }
@@ -188,7 +214,7 @@ const narciss: Brain = {
     // =================================================================
     if (self.bullets > 0 && self.energy >= g.eatBulletEnergyCost) {
       if (hpPct < 0.4 || (self.poisoned && hpPct < 0.6)) {
-        return { do: g.actions.eat };
+        return { do: g.actions.eat, params: { message: q(Q_DEFENSE) } };
       }
     }
 
@@ -236,14 +262,14 @@ const narciss: Brain = {
     // 5. MODERATE HEAL (HP missing >= bullet heal value)
     // =================================================================
     if (self.lives <= maxHP - g.livesPerEatenBullet && self.bullets > 0 && self.energy >= g.eatBulletEnergyCost) {
-      return { do: g.actions.eat };
+      return { do: g.actions.eat, params: { message: q(Q_DEFENSE) } };
     }
 
     // =================================================================
     // 6. PROACTIVE HEAL (HP < 90%, full energy)
     // =================================================================
     if (hpPct < 0.9 && self.energy >= maxEnergy && self.bullets > 0) {
-      return { do: g.actions.eat };
+      return { do: g.actions.eat, params: { message: q(Q_DEFENSE) } };
     }
 
     // =================================================================
@@ -327,9 +353,9 @@ const narciss: Brain = {
       if (fightTarget) {
         const dist = g.distanceBetween(self, fightTarget);
         if (dist > 350) {
-          return { do: g.actions.move, params: { angle: g.angleBetween(self, fightTarget) } };
+          return { do: g.actions.move, params: { angle: g.angleBetween(self, fightTarget), message: q(Q_STALK) } };
         }
-        return { do: g.actions.turn, params: { angle: g.angleBetween(self, fightTarget) } };
+        return { do: g.actions.turn, params: { angle: g.angleBetween(self, fightTarget), message: q(Q_STALK) } };
       }
 
       // No fight detected — stalk wounded or weakest enemy
