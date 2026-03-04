@@ -4,7 +4,7 @@ const g = globalThis as any;
 
 // =============================================================================
 // _rat v9.2 — Lead-Targeting IQ Hunter + Event Tracking
-// Species: Runchip (does NOT use poison spell)
+// Species: Splitpus (no spell)
 //
 // Base: v9.1 (57% wins, 93% top-3 over 14x 1h runs)
 // New in v9.2:
@@ -104,7 +104,7 @@ function engageTarget(self: any, target: any, maxRange: number): Action {
 // ---------------------------------------------------------------------------
 const narciss: Brain = {
   name: '_rat',
-  kind: g.kinds.runchip,
+  kind: g.kinds.splitpus,
   author: '_rat',
   description: 'Fight-stalker. Kill-steal, smart dodge, stay and fight.',
 
