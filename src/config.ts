@@ -108,6 +108,7 @@ export const defaultConfig: GameConfig = {
     'br_troll.js',
     'br_mamba.js',
     'br_rat.js',
+    'br_aegisprime.js',
   ],
   shuffleBrains: true,
 
