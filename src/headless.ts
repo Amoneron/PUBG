@@ -7,98 +7,87 @@ import * as path from 'path';
 
 async function main() {
   const args = process.argv.slice(2);
-  const minutes = parseInt(args[0] || '60', 10);
+  const durationSec = parseInt(args[0] || '180', 10);
+  const gameMinutesPerRound = parseInt(args[1] || '60', 10);
   const ticksPerSecond = 60;
-  const totalTicks = minutes * 60 * ticksPerSecond;
+  const ticksPerRound = gameMinutesPerRound * 60 * ticksPerSecond;
 
-  console.log(`Starting headless battle for ${minutes} minutes (${totalTicks} ticks)...`);
+  console.log(`Starting tournament: ${durationSec}s real time, ${gameMinutesPerRound} game-min per round...`);
 
-  // Install globals before importing brains
+  // Install globals once
   installGlobals(defaultConfig, defaultConfig.arena);
-
-  const { allBrains } = await import('./brains/index');
 
   const dataDir = path.join(process.cwd(), 'data');
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
   const iqPath = path.join(dataDir, 'iq.json');
   const leaderboardPath = path.join(dataDir, 'leaderboard.json');
 
-  // Load previous IQ data
-  let initialIQ: Record<string, number> | undefined;
-  if (fs.existsSync(iqPath)) {
-    try {
-      initialIQ = JSON.parse(fs.readFileSync(iqPath, 'utf-8'));
-      console.log(`[IQ] Loaded ${Object.keys(initialIQ!).length} entries from ${iqPath}`);
-    } catch {
-      console.warn(`[IQ] Failed to parse ${iqPath}, starting fresh`);
-    }
-  }
-
-  const iqStorage = new FileIQStorage(initialIQ);
-  const engine = new GameEngine(defaultConfig, allBrains, { iqStorage });
-  installRayBetween(engine.getMatterEngine());
+  // Accumulators
+  const totals: Record<string, { author: string; iqSum: number; kills: number; deaths: number }> = {};
+  let totalTicks = 0;
+  let rounds = 0;
 
   const startTime = Date.now();
+  const endTime = startTime + durationSec * 1000;
 
-  for (let i = 0; i < totalTicks; i++) {
-    engine.tick();
-    if (i > 0 && i % (ticksPerSecond * 60) === 0) {
-      const elapsed = Math.round((Date.now() - startTime) / 1000);
-      console.log(`  Tick ${i}/${totalTicks} (${Math.round(i / totalTicks * 100)}%) - ${elapsed}s elapsed`);
+  while (Date.now() < endTime) {
+    rounds++;
+    const { allBrains } = await import('./brains/index');
+    const iqStorage = new FileIQStorage();
+    const engine = new GameEngine(defaultConfig, allBrains, { iqStorage });
+    installRayBetween(engine.getMatterEngine());
+
+    for (let i = 0; i < ticksPerRound; i++) {
+      engine.tick();
     }
+    totalTicks += ticksPerRound;
+
+    // Collect stats from this round
+    for (const b of engine.getBrains()) {
+      if (!totals[b.name]) {
+        totals[b.name] = { author: b.author, iqSum: 0, kills: 0, deaths: 0 };
+      }
+      totals[b.name].iqSum += b.iq;
+      totals[b.name].kills += b.kills;
+      totals[b.name].deaths += b.deaths;
+    }
+
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    console.log(`  Round ${rounds} done (${elapsed}s elapsed)`);
   }
 
   const elapsed = Math.round((Date.now() - startTime) / 1000);
-  console.log(`Battle complete in ${elapsed}s.`);
+  console.log(`\nTournament complete: ${rounds} rounds, ${totalTicks} ticks in ${elapsed}s.`);
 
-  // Save IQ data to file for next run
-  fs.writeFileSync(iqPath, JSON.stringify(iqStorage.getAll(), null, 2));
-  console.log(`[IQ] Saved to ${iqPath}`);
-
-  // Load previous leaderboard for accumulation
-  let previousStandings: Record<string, { kills: number; deaths: number }> = {};
-  let previousTotalTicks = 0;
-  if (fs.existsSync(leaderboardPath)) {
-    try {
-      const prev = JSON.parse(fs.readFileSync(leaderboardPath, 'utf-8'));
-      previousTotalTicks = prev.totalTicks || 0;
-      for (const s of prev.standings || []) {
-        previousStandings[s.name] = { kills: s.kills || 0, deaths: s.deaths || 0 };
-      }
-      console.log(`[Leaderboard] Loaded previous results (${previousTotalTicks} ticks, ${Object.keys(previousStandings).length} bots)`);
-    } catch {
-      console.warn('[Leaderboard] Failed to parse previous leaderboard, starting fresh');
-    }
-  }
-
-  // Build leaderboard with accumulated stats
-  const brains = engine.getBrains();
-  const standings = brains
-    .map(b => {
-      const prev = previousStandings[b.name];
-      return {
-        name: b.name,
-        author: b.author,
-        iq: b.iq,
-        kills: b.kills + (prev?.kills || 0),
-        deaths: b.deaths + (prev?.deaths || 0),
-      };
-    })
+  // Build leaderboard — average IQ, total kills/deaths
+  const standings = Object.entries(totals)
+    .map(([name, t]) => ({
+      name,
+      author: t.author,
+      iq: Math.round(t.iqSum / rounds * 10) / 10,
+      kills: t.kills,
+      deaths: t.deaths,
+    }))
     .sort((a, b) => b.iq - a.iq);
 
   const leaderboard = {
     lastUpdated: new Date().toISOString(),
-    totalTicks: previousTotalTicks + totalTicks,
-    durationMinutes: Math.round((previousTotalTicks + totalTicks) / (60 * ticksPerSecond)),
+    totalTicks,
+    rounds,
+    gameMinutesPerRound,
+    durationSeconds: elapsed,
     standings,
   };
 
-  // Write leaderboard
+  // Write results
   fs.writeFileSync(leaderboardPath, JSON.stringify(leaderboard, null, 2));
+  const iqData: Record<string, number> = {};
+  for (const s of standings) iqData[s.name] = s.iq;
+  fs.writeFileSync(iqPath, JSON.stringify(iqData, null, 2));
   console.log(`Leaderboard saved to ${leaderboardPath}`);
   console.log('\nResults:');
   standings.forEach((s, i) => {
-    console.log(`  ${i + 1}. ${s.name} (${s.author}) - IQ: ${s.iq}, K: ${s.kills}, D: ${s.deaths}`);
+    console.log(`  ${i + 1}. ${s.name} (${s.author}) - avgIQ: ${s.iq}, K: ${s.kills}, D: ${s.deaths}`);
   });
 }
 
