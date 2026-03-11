@@ -28,5 +28,12 @@ Thumbs.db
 # Temporary files
 tmp/
 
+# Diagnostic data (opus-lab)
+data/diag/
+data/analysis/
+src/headless-diag.ts
+src/parallel-diag.ts
+src/full-stats-diag.ts
+
 # Deployment credentials
 .deploy.md
