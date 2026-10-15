@@ -1,6 +1,7 @@
 import type { Brain } from '../types';
 
-// Import all bots (13 total)
+// Import all bots (14 total)
+import astra from './astra';
 import opus from './opus';
 import reptile from './reptile';
 import rathorn from './rathorn';
@@ -16,7 +17,7 @@ import rat from './rat';
 import aegisprime from './aegisprime';
 
 export const allBrains: Brain[] = [
-  opus, reptile, niloultet, rathorn, helltrain,
+  astra, opus, reptile, niloultet, rathorn, helltrain,
   mindblast, hodor, pacifist, meowstraponius, troll,
   mamba, rat, aegisprime,
 ];
